@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Emergency SOS",
+    "slug": "disbud",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app needs access to location to send your coordinates in case of emergency.",
+        "NSLocationAlwaysUsageDescription": "This app needs access to location to send your coordinates in case of emergency.",
+        "NSContactsUsageDescription": "This app needs access to contacts to send emergency messages."
+      },
+      "bundleIdentifier": "com.yourcompany.disbud"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "SEND_SMS",
+        "READ_CONTACTS",
+        "CALL_PHONE"
+      ],
+      "package": "com.yourcompany.disbud"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
