@@ -35,6 +35,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'YES',
+          style: 'destructive',
           onPress: async () => {
             const numbers = [emergencyNumbers.primary];
             if (emergencyNumbers.secondary) {
@@ -47,10 +48,20 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             }
 
             try {
-              await EmergencyService.sendEmergencyAlert(numbers);
+              const sent = await EmergencyService.sendEmergencyAlert(numbers);
+              if (!sent) {
+                Alert.alert(
+                  'SMS Failed',
+                  'Could not send SMS. Trying emergency call...'
+                );
+              }
             } catch (error) {
               console.error('Error:', error);
-              Alert.alert('Error', 'Failed to send emergency alert');
+              Alert.alert(
+                'Error',
+                'Failed to send emergency alert. Trying to make a call...'
+              );
+              EmergencyService.makeEmergencyCall(numbers[0]);
             }
           }
         },

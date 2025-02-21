@@ -32,8 +32,8 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "SEND_SMS",
-        "READ_CONTACTS",
-        "CALL_PHONE"
+        "READ_SMS",
+        "WRITE_SMS"
       ],
       "package": "com.yourcompany.disbud"
     },

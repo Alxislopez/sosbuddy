@@ -3,6 +3,7 @@ import * as Location from 'expo-location';
 import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Platform } from 'react-native';
+import Communications from 'react-native-communications';
 
 export interface LocationData {
   coords: {
@@ -38,35 +39,56 @@ export class EmergencyService {
 
       const message = `EMERGENCY: I need immediate assistance! Location: ${coords}`;
 
-      // Send SMS
-      const isAvailable = await SMS.isAvailableAsync();
-      if (!isAvailable) {
-        this.makeEmergencyCall(numbers[0]); // Fallback to call if SMS not available
-        return false;
-      }
-
-      // Send SMS without waiting for user interaction
-      SMS.sendSMSAsync(numbers, message).then(() => {
-        // After SMS is sent (or attempted), initiate call
-        if (Platform.OS === 'android') {
+      if (Platform.OS === 'android') {
+        // Use Communications for Android
+        Communications.textWithoutEncoding(numbers[0], message);
+        
+        // If there's a secondary number, send to that too
+        if (numbers.length > 1) {
           setTimeout(() => {
-            this.makeEmergencyCall(numbers[0]);
-          }, 1000);
+            Communications.textWithoutEncoding(numbers[1], message);
+          }, 500);
         }
-      });
 
-      return true;
+        // After a short delay, initiate call
+        setTimeout(() => {
+          this.makeEmergencyCall(numbers[0]);
+        }, 1500);
+        
+        return true;
+      } else {
+        // For iOS, use Linking
+        const smsUrl = `sms:${numbers.join(',')}&body=${encodeURIComponent(message)}`;
+        await Linking.openURL(smsUrl);
+        return true;
+      }
     } catch (error) {
       console.error('Error in emergency alert:', error);
-      this.makeEmergencyCall(numbers[0]); // Fallback to call
+      // Fallback to call if SMS fails
+      this.makeEmergencyCall(numbers[0]);
       return false;
     }
   }
 
   static async makeEmergencyCall(phoneNumber: string): Promise<void> {
     try {
-      const url = `tel:${phoneNumber}`;
-      await Linking.openURL(url);
+      if (Platform.OS === 'android') {
+        Communications.phonecall(phoneNumber, true);
+      } else {
+        // For iOS, show confirmation dialog
+        Alert.alert(
+          'Emergency Call',
+          'Do you want to call emergency contact?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Call',
+              style: 'destructive',
+              onPress: () => Communications.phonecall(phoneNumber, true)
+            }
+          ]
+        );
+      }
     } catch (error) {
       console.error('Error making call:', error);
       Alert.alert('Error', 'Failed to initiate emergency call');
