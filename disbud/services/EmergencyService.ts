@@ -12,47 +12,53 @@ export interface LocationData {
 }
 
 export class EmergencyService {
-  static async requestLocationPermission(): Promise<LocationData | null> {
+  static async getCurrentLocation(): Promise<LocationData | null> {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Denied',
-          'Location permission is needed to send your location in emergency.'
-        );
-        return null;
-      }
-      return await Location.getCurrentPositionAsync({});
+      return await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+        maximumAge: 10000, // Use cached location if less than 10 seconds old
+      });
     } catch (error) {
-      console.error('Error requesting location:', error);
+      console.error('Error getting location:', error);
       return null;
     }
   }
 
-  static async sendSMS(phoneNumbers: string[], message: string): Promise<boolean> {
+  static async sendEmergencyAlert(numbers: string[]): Promise<boolean> {
     try {
+      if (!numbers.length) {
+        throw new Error('No emergency numbers available');
+      }
+
+      // Get location first
+      const location = await this.getCurrentLocation();
+      const coords = location
+        ? `Lat: ${location.coords.latitude}, Long: ${location.coords.longitude}`
+        : 'Location unavailable';
+
+      const message = `EMERGENCY: I need immediate assistance! Location: ${coords}`;
+
+      // Send SMS
       const isAvailable = await SMS.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert(
-          'Error',
-          'SMS is not available on this device. Please try calling instead.'
-        );
+        this.makeEmergencyCall(numbers[0]); // Fallback to call if SMS not available
         return false;
       }
 
-      const { result } = await SMS.sendSMSAsync(phoneNumbers, message);
-      if (result === 'sent') {
-        Alert.alert('Success', 'Emergency message sent successfully');
-        return true;
-      } else {
-        throw new Error('Failed to send SMS');
-      }
+      // Send SMS without waiting for user interaction
+      SMS.sendSMSAsync(numbers, message).then(() => {
+        // After SMS is sent (or attempted), initiate call
+        if (Platform.OS === 'android') {
+          setTimeout(() => {
+            this.makeEmergencyCall(numbers[0]);
+          }, 1000);
+        }
+      });
+
+      return true;
     } catch (error) {
-      console.error('Error sending SMS:', error);
-      Alert.alert(
-        'Error',
-        'Failed to send emergency message. Please try calling directly.'
-      );
+      console.error('Error in emergency alert:', error);
+      this.makeEmergencyCall(numbers[0]); // Fallback to call
       return false;
     }
   }
@@ -60,13 +66,6 @@ export class EmergencyService {
   static async makeEmergencyCall(phoneNumber: string): Promise<void> {
     try {
       const url = `tel:${phoneNumber}`;
-      const canOpen = await Linking.canOpenURL(url);
-      
-      if (!canOpen) {
-        Alert.alert('Error', 'Unable to make phone calls from this device');
-        return;
-      }
-
       await Linking.openURL(url);
     } catch (error) {
       console.error('Error making call:', error);

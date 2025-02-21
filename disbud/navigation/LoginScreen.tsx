@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LoginScreenNavigationProp, RootStackParamList } from '../types/navigation';
 import { RouteProp } from '@react-navigation/native';
 import { EmergencyService } from '../services/EmergencyService';
+import * as Location from 'expo-location';
 
 interface LoginScreenProps {
   navigation: LoginScreenNavigationProp;
@@ -16,10 +17,27 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
   const isEditMode = route.params?.mode === 'edit';
 
   useEffect(() => {
+    requestPermissions();
     if (isEditMode) {
       loadSavedNumbers();
+    } else {
+      checkExistingNumbers();
     }
   }, [isEditMode]);
+
+  const requestPermissions = async () => {
+    try {
+      const locationStatus = await Location.requestForegroundPermissionsAsync();
+      if (locationStatus.status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Location permission is needed for emergency services to find you.'
+        );
+      }
+    } catch (error) {
+      console.error('Error requesting permissions:', error);
+    }
+  };
 
   const loadSavedNumbers = async () => {
     try {
@@ -31,6 +49,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
     }
   };
 
+  const checkExistingNumbers = async () => {
+    try {
+      const numbers = await EmergencyService.getEmergencyNumbers();
+      if (numbers.primary) {
+        navigation.replace('Home');
+      }
+    } catch (error) {
+      console.error('Error checking numbers:', error);
+    }
+  };
+
   const saveNumbers = async () => {
     if (!primaryNumber) {
       Alert.alert('Error', 'Please enter at least the primary number');
@@ -39,8 +68,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
 
     try {
       await EmergencyService.saveEmergencyNumbers(primaryNumber, secondaryNumber);
-      Alert.alert('Success', 'Emergency numbers saved successfully');
-      navigation.navigate('Home');
+      Alert.alert(
+        'Success', 
+        'Emergency numbers saved successfully',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.replace('Home')
+          }
+        ]
+      );
     } catch (error) {
       Alert.alert('Error', 'Failed to save numbers');
     }

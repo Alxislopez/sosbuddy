@@ -15,13 +15,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [emergencyNumbers, setEmergencyNumbers] = useState({ primary: '', secondary: '' });
 
   useEffect(() => {
-    loadInitialData();
+    loadEmergencyNumbers();
   }, []);
 
-  const loadInitialData = async () => {
-    const loc = await EmergencyService.requestLocationPermission();
-    setLocation(loc);
+  const loadEmergencyNumbers = async () => {
     const numbers = await EmergencyService.getEmergencyNumbers();
+    if (!numbers.primary) {
+      navigation.replace('Login');
+      return;
+    }
     setEmergencyNumbers(numbers);
   };
 
@@ -34,58 +36,26 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         { 
           text: 'YES',
           onPress: async () => {
-            await sendEmergencyAlert();
+            const numbers = [emergencyNumbers.primary];
+            if (emergencyNumbers.secondary) {
+              numbers.push(emergencyNumbers.secondary);
+            }
+
+            if (numbers.length === 0) {
+              Alert.alert('Error', 'No emergency numbers saved');
+              return;
+            }
+
+            try {
+              await EmergencyService.sendEmergencyAlert(numbers);
+            } catch (error) {
+              console.error('Error:', error);
+              Alert.alert('Error', 'Failed to send emergency alert');
+            }
           }
         },
       ]
     );
-  };
-
-  const sendEmergencyAlert = async () => {
-    try {
-      const numbers = [emergencyNumbers.primary];
-      if (emergencyNumbers.secondary) {
-        numbers.push(emergencyNumbers.secondary);
-      }
-
-      if (numbers.length === 0) {
-        Alert.alert('Error', 'No emergency numbers saved');
-        return;
-      }
-
-      // Request location permission and get current location
-      const loc = await EmergencyService.requestLocationPermission();
-      setLocation(loc);
-
-      const coords = loc
-        ? `Lat: ${loc.coords.latitude}, Long: ${loc.coords.longitude}`
-        : 'Location unavailable';
-
-      const message = `EMERGENCY: I need immediate assistance! Location: ${coords}`;
-      
-      const smsSent = await EmergencyService.sendSMS(numbers, message);
-      
-      // If SMS fails or after SMS is sent, try to make a call
-      if (!smsSent || Platform.OS === 'ios') {
-        Alert.alert(
-          'Make Emergency Call',
-          'Would you like to call your primary emergency contact?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Call',
-              onPress: () => EmergencyService.makeEmergencyCall(numbers[0])
-            }
-          ]
-        );
-      }
-    } catch (error) {
-      console.error('Error in emergency alert:', error);
-      Alert.alert(
-        'Error',
-        'Failed to send emergency alert. Please try calling directly.'
-      );
-    }
   };
 
   return (
