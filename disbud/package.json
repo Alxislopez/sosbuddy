@@ -19,11 +19,12 @@
     "expo-sms": "~11.4.0",
     "expo-linking": "~5.0.2",
     "react": "18.2.0",
-    "react-native": "0.72.6",
+    "react-native": "0.72.10",
     "react-native-communications": "^2.2.1",
     "react-native-web": "~0.19.6",
     "react-dom": "18.2.0",
-    "@expo/webpack-config": "^19.0.0"
+    "@expo/webpack-config": "^19.0.0",
+    "expo-constants": "~14.4.2"
   },
   "devDependencies": {
     "typescript": "^5.1.3",
