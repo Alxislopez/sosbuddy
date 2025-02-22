@@ -5,121 +5,116 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Platform } from 'react-native';
 import Communications from 'react-native-communications';
 
-export interface LocationData {
+interface LocationData {
   coords: {
     latitude: number;
     longitude: number;
   };
 }
 
-export class EmergencyService {
-  static async getCurrentLocation(): Promise<LocationData | null> {
+export const EmergencyService = {
+  async requestLocationPermission(): Promise<boolean> {
     try {
-      return await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-        maximumAge: 10000, // Use cached location if less than 10 seconds old
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      return status === 'granted';
+    } catch (error) {
+      console.error('Error requesting location permission:', error);
+      return false;
+    }
+  },
+
+  async getCurrentLocation(): Promise<LocationData | null> {
+    try {
+      const hasPermission = await this.requestLocationPermission();
+      if (!hasPermission) {
+        Alert.alert('Permission Denied', 'Location access is required for emergency services');
+        return null;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High
       });
+      return location;
     } catch (error) {
       console.error('Error getting location:', error);
       return null;
     }
-  }
+  },
 
-  static async sendEmergencyAlert(numbers: string[]): Promise<boolean> {
+  async sendEmergencyAlert(name: string, numbers: string[]): Promise<boolean> {
     try {
       if (!numbers.length) {
         throw new Error('No emergency numbers available');
       }
 
-      // Get location first
+      // Get location
       const location = await this.getCurrentLocation();
-      const coords = location
-        ? `Lat: ${location.coords.latitude}, Long: ${location.coords.longitude}`
+      const googleMapsUrl = location 
+        ? `https://www.google.com/maps?q=${location.coords.latitude},${location.coords.longitude}`
         : 'Location unavailable';
 
-      const message = `EMERGENCY: I need immediate assistance! Location: ${coords}`;
+      const message = `EMERGENCY: ${name} needs immediate assistance!\n\nCurrent Location: ${googleMapsUrl}\n\nThis is an automated emergency alert.`;
 
       if (Platform.OS === 'android') {
-        // Use Communications for Android
-        Communications.textWithoutEncoding(numbers[0], message);
-        
-        // If there's a secondary number, send to that too
-        if (numbers.length > 1) {
-          setTimeout(() => {
-            Communications.textWithoutEncoding(numbers[1], message);
-          }, 500);
+        // Send SMS to all numbers
+        for (const number of numbers) {
+          Communications.textWithoutEncoding(number, message);
+          await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between messages
         }
 
-        // After a short delay, initiate call
+        // Make emergency call to first number after sending SMS
         setTimeout(() => {
           this.makeEmergencyCall(numbers[0]);
-        }, 1500);
-        
-        return true;
+        }, 1000);
       } else {
         // For iOS, use Linking
         const smsUrl = `sms:${numbers.join(',')}&body=${encodeURIComponent(message)}`;
         await Linking.openURL(smsUrl);
-        return true;
+        
+        // Make emergency call after a short delay
+        setTimeout(() => {
+          this.makeEmergencyCall(numbers[0]);
+        }, 1000);
       }
+
+      return true;
     } catch (error) {
       console.error('Error in emergency alert:', error);
       // Fallback to call if SMS fails
       this.makeEmergencyCall(numbers[0]);
       return false;
     }
-  }
+  },
 
-  static async makeEmergencyCall(phoneNumber: string): Promise<void> {
+  async makeEmergencyCall(phoneNumber: string): Promise<void> {
     try {
       if (Platform.OS === 'android') {
         Communications.phonecall(phoneNumber, true);
       } else {
-        // For iOS, show confirmation dialog
-        Alert.alert(
-          'Emergency Call',
-          'Do you want to call emergency contact?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Call',
-              style: 'destructive',
-              onPress: () => Communications.phonecall(phoneNumber, true)
-            }
-          ]
-        );
+        const telUrl = `tel:${phoneNumber}`;
+        const canOpen = await Linking.canOpenURL(telUrl);
+        if (canOpen) {
+          await Linking.openURL(telUrl);
+        } else {
+          Alert.alert('Error', 'Cannot make phone calls from this device');
+        }
       }
     } catch (error) {
       console.error('Error making call:', error);
       Alert.alert('Error', 'Failed to initiate emergency call');
     }
-  }
+  },
 
-  static async saveEmergencyNumbers(primary: string, secondary?: string): Promise<void> {
-    try {
-      if (!primary) {
-        throw new Error('Primary number is required');
-      }
-      await AsyncStorage.setItem('primaryNumber', primary);
-      if (secondary) {
-        await AsyncStorage.setItem('secondaryNumber', secondary);
-      } else {
-        await AsyncStorage.removeItem('secondaryNumber');
-      }
-    } catch (error) {
-      console.error('Error saving numbers:', error);
-      throw error;
-    }
-  }
+  async saveEmergencyNumbers(primary: string, secondary: string[]): Promise<boolean> {
+    // Mock implementation for now
+    return true;
+  },
 
-  static async getEmergencyNumbers(): Promise<{ primary: string; secondary: string }> {
-    try {
-      const primary = await AsyncStorage.getItem('primaryNumber') || '';
-      const secondary = await AsyncStorage.getItem('secondaryNumber') || '';
-      return { primary, secondary };
-    } catch (error) {
-      console.error('Error getting numbers:', error);
-      return { primary: '', secondary: '' };
-    }
+  async getEmergencyNumbers() {
+    // Mock implementation for now
+    return {
+      primary: '',
+      secondary: []
+    };
   }
-} 
+}; 

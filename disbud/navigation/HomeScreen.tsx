@@ -1,147 +1,241 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, Platform } from 'react-native';
+import React from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, Alert } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { Audio } from 'expo-av';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../types/navigation';
+import { EmergencyService } from '../services/EmergencyService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import EmergencyButton from '../components/EmergencyButton';
-import { EmergencyService, LocationData } from '../services/EmergencyService';
-import ActionButton from '../components/ActionButton';
-import { HomeScreenNavigationProp } from '../types/navigation';
 
-interface HomeScreenProps {
+type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
+
+type Props = {
   navigation: HomeScreenNavigationProp;
-}
+};
 
-const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
-  const [location, setLocation] = useState<LocationData | null>(null);
-  const [emergencyNumbers, setEmergencyNumbers] = useState({ primary: '', secondary: '' });
+export default function HomeScreen({ navigation }: Props) {
+  const [isDisabled, setIsDisabled] = useState(false);
+  const [name, setName] = useState('');
+  const [phoneNumbers, setPhoneNumbers] = useState<string[]>([]);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const [isAlarmActive, setIsAlarmActive] = useState(false);
 
   useEffect(() => {
-    loadEmergencyNumbers();
+    loadUserData();
+    loadSound();
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+    };
   }, []);
 
-  const loadEmergencyNumbers = async () => {
-    const numbers = await EmergencyService.getEmergencyNumbers();
-    if (!numbers.primary) {
-      navigation.replace('Login');
-      return;
+  const loadUserData = async () => {
+    try {
+      const savedName = await AsyncStorage.getItem('userName');
+      const savedNumbers = await AsyncStorage.getItem('phoneNumbers');
+      
+      if (savedName) setName(savedName);
+      if (savedNumbers) setPhoneNumbers(JSON.parse(savedNumbers));
+    } catch (error) {
+      console.error('Error loading user data:', error);
     }
-    setEmergencyNumbers(numbers);
+  };
+
+  const loadSound = async () => {
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        require('../assets/alarm.mp3'),
+        { isLooping: true }
+      );
+      soundRef.current = sound;
+    } catch (error) {
+      console.error('Error loading sound:', error);
+    }
+  };
+
+  const playAlarm = async () => {
+    try {
+      if (!soundRef.current) {
+        await loadSound();
+      }
+      
+      // Set audio mode for better playback
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        staysActiveInBackground: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+
+      await soundRef.current?.playAsync();
+      setIsAlarmActive(true);
+    } catch (error) {
+      console.error('Error playing alarm:', error);
+      Alert.alert('Error', 'Failed to play alarm sound');
+    }
+  };
+
+  const stopAlarm = async () => {
+    try {
+      if (soundRef.current) {
+        await soundRef.current.stopAsync();
+        setIsAlarmActive(false);
+      }
+    } catch (error) {
+      console.error('Error stopping alarm:', error);
+      Alert.alert('Error', 'Failed to stop alarm sound');
+    }
   };
 
   const handleEmergency = async () => {
-    Alert.alert(
-      'Emergency Alert',
-      'Are you sure you want to send a distress signal?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'YES',
-          style: 'destructive',
-          onPress: async () => {
-            const numbers = [emergencyNumbers.primary];
-            if (emergencyNumbers.secondary) {
-              numbers.push(emergencyNumbers.secondary);
-            }
+    if (isDisabled) return;
+    
+    if (!name || !phoneNumbers.length) {
+      Alert.alert('Error', 'Please set up your emergency contacts first');
+      navigation.replace('Login');
+      return;
+    }
 
-            if (numbers.length === 0) {
-              Alert.alert('Error', 'No emergency numbers saved');
-              return;
-            }
+    setIsDisabled(true);
 
-            try {
-              const sent = await EmergencyService.sendEmergencyAlert(numbers);
-              if (!sent) {
-                Alert.alert(
-                  'SMS Failed',
-                  'Could not send SMS. Trying emergency call...'
-                );
-              }
-            } catch (error) {
-              console.error('Error:', error);
-              Alert.alert(
-                'Error',
-                'Failed to send emergency alert. Trying to make a call...'
-              );
-              EmergencyService.makeEmergencyCall(numbers[0]);
-            }
-          }
-        },
-      ]
-    );
+    try {
+      // Start alarm
+      await playAlarm();
+
+      // Send emergency alert with location and make call
+      await EmergencyService.sendEmergencyAlert(name.trim(), phoneNumbers);
+
+      // Navigate to details screen
+      navigation.navigate('Details', { 
+        itemId: 1,
+        name: name.trim(),
+        phoneNumbers: phoneNumbers,
+        soundRef: soundRef.current
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to send emergency alert');
+    } finally {
+      setTimeout(() => {
+        setIsDisabled(false);
+      }, 500);
+    }
+  };
+
+  const handleEditInfo = () => {
+    navigation.replace('Login');
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.welcomeText}>Welcome, alexis</Text>
-      
-      <Text style={styles.instructionText}>
-        Press the button below in case of emergency
-      </Text>
+      <Text style={styles.welcomeText}>Welcome, {name}</Text>
+      <Text style={styles.subtitle}>Emergency Contacts: {phoneNumbers.length}</Text>
 
-      <EmergencyButton onPress={handleEmergency} />
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity
+          style={[styles.emergencyButton, isDisabled && styles.buttonDisabled]}
+          onPress={handleEmergency}
+          disabled={isDisabled}
+        >
+          <Text style={styles.buttonText}>SEND DISTRESS SIGNAL</Text>
+        </TouchableOpacity>
 
-      <View style={styles.contactsContainer}>
-        <Text style={styles.contactsTitle}>Emergency Contacts:</Text>
-        {emergencyNumbers.primary && (
-          <Text style={styles.contactText}>{emergencyNumbers.primary} (Primary)</Text>
+        {isAlarmActive && (
+          <TouchableOpacity
+            style={styles.stopAlarmButton}
+            onPress={stopAlarm}
+          >
+            <Text style={styles.buttonText}>STOP ALARM</Text>
+          </TouchableOpacity>
         )}
-        {emergencyNumbers.secondary && (
-          <Text style={styles.contactText}>{emergencyNumbers.secondary}</Text>
-        )}
-      </View>
 
-      <View style={styles.bottomButtons}>
-        <ActionButton
-          title="Change Emergency Numbers"
-          onPress={() => navigation.navigate('Login', { mode: 'edit' })}
-        />
-        <ActionButton
-          title="Return to Login"
-          onPress={() => navigation.navigate('Login')}
-        />
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={handleEditInfo}
+        >
+          <Text style={styles.editButtonText}>Edit Emergency Contacts</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    padding: 16,
     alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f5f5f5',
   },
   welcomeText: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
-    marginTop: 32,
-    marginBottom: 16,
+    marginTop: 40,
+    marginBottom: 10,
+    color: '#333',
   },
-  instructionText: {
+  subtitle: {
     fontSize: 16,
-    color: '#666666',
-    marginBottom: 32,
-    textAlign: 'center',
+    color: '#666',
+    marginBottom: 40,
   },
-  contactsContainer: {
+  buttonContainer: {
+    width: '100%',
     alignItems: 'center',
-    marginTop: 32,
+    gap: 20,
   },
-  contactsTitle: {
+  emergencyButton: {
+    backgroundColor: '#FF4444',
+    padding: 20,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  stopAlarmButton: {
+    backgroundColor: '#cc0000',
+    padding: 20,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  buttonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  buttonText: {
+    color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 8,
   },
-  contactText: {
+  editButton: {
+    backgroundColor: 'transparent',
+    padding: 15,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#FF4444',
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  editButtonText: {
+    color: '#FF4444',
     fontSize: 16,
-    color: '#666666',
-    marginBottom: 4,
+    fontWeight: '600',
   },
-  bottomButtons: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    right: 16,
-  },
-});
-
-export default HomeScreen; 
+}); 

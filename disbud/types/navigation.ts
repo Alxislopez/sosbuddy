@@ -1,8 +1,15 @@
 import { StackNavigationProp } from '@react-navigation/stack';
+import { Audio } from 'expo-av';
 
 export type RootStackParamList = {
+  Login: undefined;
   Home: undefined;
-  Login: { mode?: 'edit' } | undefined;
+  Details: {
+    itemId: number;
+    name: string;
+    phoneNumbers: string[];
+    soundRef: Audio.Sound | null;
+  };
 };
 
 export type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;

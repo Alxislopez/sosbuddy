@@ -1,29 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import HomeScreen from './HomeScreen';
 import LoginScreen from './LoginScreen';
+import DetailScreen from './DetailScreen';
 import { RootStackParamList } from '../types/navigation';
-import { EmergencyService } from '../services/EmergencyService';
 
-const Stack = createStackNavigator<RootStackParamList>();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AppNavigator = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const [hasNumbers, setHasNumbers] = useState(false);
+  const [hasUserData, setHasUserData] = useState(false);
 
   useEffect(() => {
-    checkExistingNumbers();
+    checkExistingData();
   }, []);
 
-  const checkExistingNumbers = async () => {
+  const checkExistingData = async () => {
     try {
-      const numbers = await EmergencyService.getEmergencyNumbers();
-      setHasNumbers(!!numbers.primary);
+      const userName = await AsyncStorage.getItem('userName');
+      setHasUserData(!!userName);
       setIsLoading(false);
     } catch (error) {
-      console.error('Error checking numbers:', error);
+      console.error('Error checking user data:', error);
       setIsLoading(false);
     }
   };
@@ -38,8 +39,8 @@ const AppNavigator = () => {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator 
-        initialRouteName={hasNumbers ? "Home" : "Login"}
+      <Stack.Navigator
+        initialRouteName={hasUserData ? "Home" : "Login"}
         screenOptions={{
           headerStyle: {
             backgroundColor: '#FF4444',
@@ -48,19 +49,31 @@ const AppNavigator = () => {
           headerTitleStyle: {
             fontWeight: 'bold',
           },
+          headerBackTitleVisible: false,
         }}
       >
-        <Stack.Screen 
-          name="Home" 
-          component={HomeScreen}
-          options={{ headerShown: false }}
-        />
         <Stack.Screen 
           name="Login" 
           component={LoginScreen}
           options={{ 
-            title: 'Emergency Contacts',
-            headerLeft: () => null // Prevent going back from login
+            title: 'Setup',
+            headerLeft: () => null // Prevent back navigation
+          }}
+        />
+        <Stack.Screen 
+          name="Home" 
+          component={HomeScreen}
+          options={{ 
+            title: 'Emergency Contact',
+            headerLeft: () => null // Prevent back navigation
+          }}
+        />
+        <Stack.Screen 
+          name="Details" 
+          component={DetailScreen}
+          options={{ 
+            title: 'Distress Signal',
+            headerShown: false,
           }}
         />
       </Stack.Navigator>

@@ -1,152 +1,212 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { 
+  StyleSheet, 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  ScrollView, 
+  Alert 
+} from 'react-native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../types/navigation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LoginScreenNavigationProp, RootStackParamList } from '../types/navigation';
-import { RouteProp } from '@react-navigation/native';
-import { EmergencyService } from '../services/EmergencyService';
-import * as Location from 'expo-location';
 
-interface LoginScreenProps {
+type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
+
+type Props = {
   navigation: LoginScreenNavigationProp;
-  route: RouteProp<RootStackParamList, 'Login'>;
-}
+};
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ navigation, route }) => {
-  const [primaryNumber, setPrimaryNumber] = useState('');
-  const [secondaryNumber, setSecondaryNumber] = useState('');
-  const isEditMode = route.params?.mode === 'edit';
+export default function LoginScreen({ navigation }: Props) {
+  const [name, setName] = useState('');
+  const [phoneNumbers, setPhoneNumbers] = useState(['']);
 
-  useEffect(() => {
-    requestPermissions();
-    if (isEditMode) {
-      loadSavedNumbers();
-    } else {
-      checkExistingNumbers();
-    }
-  }, [isEditMode]);
+  const addPhoneNumber = () => {
+    setPhoneNumbers([...phoneNumbers, '']);
+  };
 
-  const requestPermissions = async () => {
-    try {
-      const locationStatus = await Location.requestForegroundPermissionsAsync();
-      if (locationStatus.status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Location permission is needed for emergency services to find you.'
-        );
-      }
-    } catch (error) {
-      console.error('Error requesting permissions:', error);
+  const updatePhoneNumber = (text: string, index: number) => {
+    const newPhoneNumbers = [...phoneNumbers];
+    newPhoneNumbers[index] = text;
+    setPhoneNumbers(newPhoneNumbers);
+  };
+
+  const removePhoneNumber = (index: number) => {
+    if (phoneNumbers.length > 1) {
+      const newPhoneNumbers = phoneNumbers.filter((_, i) => i !== index);
+      setPhoneNumbers(newPhoneNumbers);
     }
   };
 
-  const loadSavedNumbers = async () => {
-    try {
-      const numbers = await EmergencyService.getEmergencyNumbers();
-      setPrimaryNumber(numbers.primary);
-      setSecondaryNumber(numbers.secondary);
-    } catch (error) {
-      console.error('Error loading numbers:', error);
+  const handleSave = async () => {
+    if (!name.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return;
     }
-  };
 
-  const checkExistingNumbers = async () => {
-    try {
-      const numbers = await EmergencyService.getEmergencyNumbers();
-      if (numbers.primary) {
-        navigation.replace('Home');
-      }
-    } catch (error) {
-      console.error('Error checking numbers:', error);
-    }
-  };
-
-  const saveNumbers = async () => {
-    if (!primaryNumber) {
-      Alert.alert('Error', 'Please enter at least the primary number');
+    const validPhoneNumbers = phoneNumbers.filter(num => num.trim().length > 0);
+    if (validPhoneNumbers.length === 0) {
+      Alert.alert('Error', 'Please enter at least one phone number');
       return;
     }
 
     try {
-      await EmergencyService.saveEmergencyNumbers(primaryNumber, secondaryNumber);
-      Alert.alert(
-        'Success', 
-        'Emergency numbers saved successfully',
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.replace('Home')
-          }
-        ]
-      );
+      // Save user data
+      await AsyncStorage.setItem('userName', name.trim());
+      await AsyncStorage.setItem('phoneNumbers', JSON.stringify(validPhoneNumbers));
+
+      // Navigate to Home
+      navigation.replace('Home');
     } catch (error) {
-      Alert.alert('Error', 'Failed to save numbers');
+      Alert.alert('Error', 'Failed to save information');
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Emergency Contacts Setup</Text>
-      
-      <TextInput
-        style={styles.input}
-        placeholder="Enter Primary Emergency Number"
-        value={primaryNumber}
-        onChangeText={setPrimaryNumber}
-        keyboardType="phone-pad"
-      />
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <View style={styles.container}>
+        <Text style={styles.title}>Emergency Contact Setup</Text>
+        
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Your Name</Text>
+          <TextInput
+            style={styles.input}
+            value={name}
+            onChangeText={setName}
+            placeholder="Enter your name"
+            placeholderTextColor="#999"
+          />
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Enter Secondary Emergency Number (Optional)"
-        value={secondaryNumber}
-        onChangeText={setSecondaryNumber}
-        keyboardType="phone-pad"
-      />
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Emergency Contact Numbers</Text>
+          {phoneNumbers.map((phoneNumber, index) => (
+            <View key={index} style={styles.phoneInputContainer}>
+              <TextInput
+                style={styles.phoneInput}
+                value={phoneNumber}
+                onChangeText={(text) => updatePhoneNumber(text, index)}
+                placeholder="Enter phone number"
+                placeholderTextColor="#999"
+                keyboardType="phone-pad"
+              />
+              {phoneNumbers.length > 1 && (
+                <TouchableOpacity
+                  style={styles.removeButton}
+                  onPress={() => removePhoneNumber(index)}
+                >
+                  <Text style={styles.removeButtonText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+          
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={addPhoneNumber}
+          >
+            <Text style={styles.addButtonText}>+ Add Another Number</Text>
+          </TouchableOpacity>
+        </View>
 
-      <TouchableOpacity 
-        style={styles.saveButton}
-        onPress={saveNumbers}
-      >
-        <Text style={styles.saveButtonText}>Save Numbers</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={handleSave}
+        >
+          <Text style={styles.saveButtonText}>Save and Continue</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
-};
+}
 
 const styles = StyleSheet.create({
+  scrollContainer: {
+    flexGrow: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    padding: 16,
+    alignItems: 'center',
+    padding: 20,
+    paddingTop: 40,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    textAlign: 'center',
-    marginTop: 32,
-    marginBottom: 32,
+    marginBottom: 30,
+    color: '#FF4444',
+  },
+  inputContainer: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#333',
   },
   input: {
-    backgroundColor: '#FFFFFF',
+    width: '100%',
+    height: 50,
     borderWidth: 1,
-    borderColor: '#CCCCCC',
+    borderColor: '#ddd',
     borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
+    paddingHorizontal: 15,
     fontSize: 16,
+    backgroundColor: 'white',
   },
-  saveButton: {
-    backgroundColor: '#FF4444',
-    padding: 16,
+  phoneInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  phoneInput: {
+    flex: 1,
+    height: 50,
+    borderWidth: 1,
+    borderColor: '#ddd',
     borderRadius: 8,
-    marginTop: 16,
+    paddingHorizontal: 15,
+    fontSize: 16,
+    backgroundColor: 'white',
   },
-  saveButtonText: {
-    color: '#FFFFFF',
-    textAlign: 'center',
+  removeButton: {
+    marginLeft: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#ff4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  removeButtonText: {
+    color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
   },
-});
-
-export default LoginScreen; 
+  addButton: {
+    padding: 10,
+    alignItems: 'center',
+    marginTop: 5,
+  },
+  addButtonText: {
+    color: '#FF4444',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  saveButton: {
+    backgroundColor: '#FF4444',
+    padding: 15,
+    borderRadius: 8,
+    width: '100%',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  saveButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+}); 
